@@ -13,6 +13,7 @@ import os
 from plugins.config import Config
 
 from pyrogram import Client as Ntbots
+from pyrogram import Client
 from pyrogram import filters
 logging.getLogger("pyrogram").setLevel(logging.WARNING)
 
@@ -31,7 +32,7 @@ if __name__ == "__main__" :
     )
 
 
-    user = Ntbots(
+    user = Client(
         "User",
         session_string=Config.SESSION_STR,
         api_id=Config.API_ID,
