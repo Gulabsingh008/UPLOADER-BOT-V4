@@ -40,11 +40,11 @@ class Config(object):
     UPDATES_CHANNEL = os.environ.get("UPDATES_CHANNEL", "")
 
     TG_MIN_FILE_SIZE = 2194304000
-    BOT_USERNAME = os.environ.get("BOT_USERNAME", "")
+    BOT_USERNAME = os.environ.get("BOT_USERNAME", "@Zxvideo_leech_bot")
     ADL_BOT_RQ = {}
 
     # Set False off else True
-    TRUE_OR_FALSE = os.environ.get("TRUE_OR_FALSE", "").lower() == "true"
+    TRUE_OR_FALSE = os.environ.get("TRUE_OR_FALSE", "False").lower() == "true"
 
     # Shortlink settings
     SHORT_DOMAIN = environ.get("SHORT_DOMAIN", "")
