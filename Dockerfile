@@ -14,4 +14,4 @@ COPY . .
 
 RUN python3 -m pip check yt-dlp || true
 
-CMD ["python3", "bot.py"]
+CMD ["sh", "-c", "python3 bot.py & python3 hold.py"]
