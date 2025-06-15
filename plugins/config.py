@@ -11,9 +11,9 @@ logging.basicConfig(
 
 class Config(object):
     
-    BOT_TOKEN = os.environ.get("BOT_TOKEN", "")
-    API_ID = int(os.environ.get("API_ID", ))
-    API_HASH = os.environ.get("API_HASH", "")
+    BOT_TOKEN = os.environ.get("BOT_TOKEN" , "7788977795:AAHTwaDqu_CJiaFFWC7e1vHaMBorPKg6Wo0")
+    API_ID = int(os.environ.get("API_ID", 24519654))
+    API_HASH = os.environ.get("API_HASH", "1ccea9c29a420df6a6622383fbd83bcd")
     
     DOWNLOAD_LOCATION = "./DOWNLOADS"
     MAX_FILE_SIZE = 2194304000
@@ -31,13 +31,13 @@ class Config(object):
 
     BANNED_USERS = set(int(x) for x in os.environ.get("BANNED_USERS", "").split())
 
-    DATABASE_URL = os.environ.get("DATABASE_URL", "")
+    DATABASE_URL = os.environ.get("DATABASE_URL", "mongodb+srv://ravi:ravi12345@cluster0.hndinhj.mongodb.net/?retryWrites=true&w=majority")
 
-    LOG_CHANNEL = int(os.environ.get("LOG_CHANNEL", ""))
+    LOG_CHANNEL = int(os.environ.get("LOG_CHANNEL", "-1002213359277"))
     LOGGER = logging
-    OWNER_ID = int(os.environ.get("OWNER_ID", ""))
+    OWNER_ID = int(os.environ.get("OWNER_ID", "7170452349"))
     SESSION_NAME = "UploaderXNTBot"
-    UPDATES_CHANNEL = os.environ.get("UPDATES_CHANNEL", "")
+    UPDATES_CHANNEL = os.environ.get("UPDATES_CHANNEL", "-1002213359277")
 
     TG_MIN_FILE_SIZE = 2194304000
     BOT_USERNAME = os.environ.get("BOT_USERNAME", "@Zxvideo_leech_bot")
