@@ -3,7 +3,7 @@ from pyrogram.types import InlineKeyboardMarkup, InlineKeyboardButton
 class Translation(object):
 
     START_TEXT = """
-👋 ʜᴇʏ {}!
+👋 ʜᴇʏ {username}
 
 🎉 ᴡᴇʟᴄᴏᴍᴇ ᴛᴏ ᴛʜᴇ ᴜʟᴛɪᴍᴀᴛᴇ ᴅᴏᴡɴʟᴏᴀᴅ ʙᴏᴛ 🤖✨  
 ɪ ᴄᴀɴ ʜᴇʟᴘ ʏᴏᴜ ɢʀᴀʙ ᴍᴇᴅɪᴀ ꜰʀᴏᴍ ᴀʟʟ ᴏᴠᴇʀ ᴛʜᴇ ɪɴᴛᴇʀɴᴇᴛ 🌐
