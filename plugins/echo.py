@@ -1,11 +1,11 @@
 # ©️ LISA-KOREA | @LISA_FAN_LK | NT_BOT_CHANNEL | TG-SORRY
 
-
 import logging
 logging.basicConfig(level=logging.DEBUG,
                     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
 import requests, urllib.parse, filetype, os, time, shutil, tldextract, asyncio, json, math
+from bs4 import BeautifulSoup
 from PIL import Image
 from plugins.config import Config
 from plugins.script import Translation
@@ -31,10 +31,53 @@ from plugins.database.add import AddUser
 from pyrogram.types import Thumbnail
 cookies_file = 'cookies.txt'
 
+def detect_platform(url):
+    if "instagram.com" in url:
+        return "instagram"
+    elif "pinterest.com" in url:
+        return "pinterest"
+    elif "twitter.com" in url or "x.com" in url:
+        return "twitter"
+    elif "snapchat.com" in url:
+        return "snapchat"
+    elif url.endswith((".jpg", ".jpeg", ".png", ".webp", ".gif")):
+        return "image"
+    else:
+        return "yt-dlp"
 
+def fetch_meta_content(url, meta_property):
+    headers = {"User-Agent": "Mozilla/5.0"}
+    try:
+        r = requests.get(url, headers=headers, timeout=10)
+        soup = BeautifulSoup(r.text, "html.parser")
+        meta = soup.find("meta", {"property": meta_property})
+        return meta.get("content") if meta else None
+    except:
+        return None
+
+def get_instagram_media(url):
+    return fetch_meta_content(url, "og:video") or fetch_meta_content(url, "og:image")
+
+def get_pinterest_media(url):
+    return fetch_meta_content(url, "og:image")
+
+def get_twitter_media(url):
+    return fetch_meta_content(url, "og:video") or fetch_meta_content(url, "og:image")
+
+def get_snapchat_media(url):
+    return fetch_meta_content(url, "og:video") or fetch_meta_content(url, "og:image")
+
+async def get_yt_dlp_download(url):
+    try:
+        command = ["yt-dlp", "-g", url]
+        process = await asyncio.create_subprocess_exec(*command, stdout=asyncio.subprocess.PIPE)
+        stdout, _ = await process.communicate()
+        return stdout.decode().split("\n")[0] if stdout else None
+    except:
+        return None
 
 @Client.on_message(filters.private & filters.regex(pattern=".*http.*"))
-async def echo(bot, update):
+async def smart_downloader(bot, update):
     if update.from_user.id != Config.OWNER_ID:  
         if not await check_verification(bot, update.from_user.id) and Config.TRUE_OR_FALSE:
             button = [[
@@ -48,6 +91,7 @@ async def echo(bot, update):
                 reply_markup=InlineKeyboardMarkup(button)
             )
             return
+            
     if Config.LOG_CHANNEL:
         try:
             log_message = await update.forward(Config.LOG_CHANNEL)
@@ -63,22 +107,54 @@ async def echo(bot, update):
             )
         except Exception as error:
             print(error)
+            
     if not update.from_user:
         return await update.reply_text("I don't know about you sar :(")
+        
     await AddUser(bot, update)
+    
     if Config.UPDATES_CHANNEL:
         fsub = await handle_force_subscribe(bot, update)
         if fsub == 400:
             return
 
-
     logger.info(update.from_user)
-    url = update.text
+    url = update.text.strip()
+    
+    # First try direct platform detection
+    await update.reply_chat_action("upload_photo")
+    platform = detect_platform(url)
+    media_url = None
+
+    if platform == "instagram":
+        media_url = get_instagram_media(url)
+    elif platform == "pinterest":
+        media_url = get_pinterest_media(url)
+    elif platform == "twitter":
+        media_url = get_twitter_media(url)
+    elif platform == "snapchat":
+        media_url = get_snapchat_media(url)
+    elif platform == "image":
+        media_url = url
+
+    if media_url:
+        try:
+            if media_url.endswith((".jpg", ".jpeg", ".png", ".webp")):
+                await update.reply_photo(media_url, caption="✅ Here's your image")
+            elif media_url.endswith(".gif"):
+                await update.reply_animation(media_url, caption="✅ Here's your GIF")
+            else:
+                await update.reply_video(media_url, caption="✅ Here's your video")
+            return
+        except Exception as e:
+            logger.error(f"Direct download failed: {e}")
+            # Fall through to yt-dlp method
+
+    # If direct methods failed or not applicable, use yt-dlp
     youtube_dl_username = None
     youtube_dl_password = None
     file_name = None
 
-    print(url)
     if "|" in url:
         url_parts = url.split("|")
         if len(url_parts) == 2:
@@ -101,7 +177,6 @@ async def echo(bot, update):
             url = url.strip()
         if file_name is not None:
             file_name = file_name.strip()
-        # https://stackoverflow.com/a/761825/4723940
         if youtube_dl_username is not None:
             youtube_dl_username = youtube_dl_username.strip()
         if youtube_dl_password is not None:
@@ -116,6 +191,7 @@ async def echo(bot, update):
                 o = entity.offset
                 l = entity.length
                 url = url[o:o + l]
+
     if Config.HTTP_PROXY != "":
         command_to_exec = [
             "yt-dlp",
@@ -138,14 +214,15 @@ async def echo(bot, update):
             url,
             "--geo-bypass-country",
             "IN"
-
         ]
+
     if youtube_dl_username is not None:
         command_to_exec.append("--username")
         command_to_exec.append(youtube_dl_username)
     if youtube_dl_password is not None:
         command_to_exec.append("--password")
         command_to_exec.append(youtube_dl_password)
+        
     logger.info(command_to_exec)
     chk = await bot.send_message(
             chat_id=update.chat.id,
@@ -154,18 +231,19 @@ async def echo(bot, update):
             reply_to_message_id=update.id,
             parse_mode=enums.ParseMode.HTML
           )
+          
     process = await asyncio.create_subprocess_exec(
         *command_to_exec,
         stdout=asyncio.subprocess.PIPE,
         stderr=asyncio.subprocess.PIPE,
     )
-    # Wait for the subprocess to finish
+    
     stdout, stderr = await process.communicate()
     e_response = stderr.decode().strip()
     logger.info(e_response)
     t_response = stdout.decode().strip()
+    
     if e_response and "nonnumeric port" not in e_response:
-        # logger.warn("Status : FAIL", exc.returncode, exc.output)
         error_message = e_response.replace("please report this issue on https://yt-dl.org/bug . Make sure you are using the latest version; see  https://yt-dl.org/update  on how to update. Be sure to call youtube-dl with the --verbose flag and include its complete output.", "")
         if "This video is only available for registered users." in error_message:
             error_message += Translation.SET_CUSTOM_USERNAME_PASSWORD
@@ -179,6 +257,7 @@ async def echo(bot, update):
             disable_web_page_preview=True
         )
         return False
+        
     if t_response:
         x_reponse = t_response
         if "\n" in x_reponse:
@@ -189,7 +268,7 @@ async def echo(bot, update):
             "/" + str(update.from_user.id) + f'{randem}' + ".json"
         with open(save_ytdl_json_path, "w", encoding="utf8") as outfile:
             json.dump(response_json, outfile, ensure_ascii=False)
-        # logger.info(response_json)
+            
         inline_keyboard = []
         duration = None
         if "duration" in response_json:
@@ -221,18 +300,7 @@ async def echo(bot, update):
                             callback_data=(cb_string_video).encode("UTF-8")
                         )
                     ]
-                    """if duration is not None:
-                        cb_string_video_message = "{}|{}|{}|{}|{}".format(
-                            "vm", format_id, format_ext, ran, randem)
-                        ikeyboard.append(
-                            InlineKeyboardButton(
-                                "VM",
-                                callback_data=(
-                                    cb_string_video_message).encode("UTF-8")
-                            )
-                        )"""
                 else:
-                    # special weird case :\
                     ikeyboard = [
                         InlineKeyboardButton(
                             "📁 [" +
@@ -242,6 +310,7 @@ async def echo(bot, update):
                         )
                     ]
                 inline_keyboard.append(ikeyboard)
+                
             if duration is not None:
                 cb_string_64 = "{}|{}|{}|{}".format("audio", "64k", "mp3", randem)
                 cb_string_128 = "{}|{}|{}|{}".format("audio", "128k", "mp3", randem)
@@ -273,6 +342,7 @@ async def echo(bot, update):
                     callback_data=(cb_string_video).encode("UTF-8")
                 )
             ])
+            
         reply_markup = InlineKeyboardMarkup(inline_keyboard)
         await chk.delete()
         await bot.send_message(
@@ -283,7 +353,6 @@ async def echo(bot, update):
             reply_to_message_id=update.id
         )
     else:
-        #fallback for nonnumeric port a.k.a seedbox.io
         inline_keyboard = []
         cb_string_file = "{}={}={}".format(
             "file", "LFO", "NONE")
