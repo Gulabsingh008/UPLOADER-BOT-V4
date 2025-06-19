@@ -31,30 +31,40 @@ async def start(bot, update):
         fsub = await handle_force_subscribe(bot, update)
         if fsub == 400:
             return
+
+    # 🧩 Case: No extra argument, just /start
     if len(update.command) != 2:
         await AddUser(bot, update)
         try:
-        await update.reply_photo(
-            photo="https://envs.sh/pU.jpg",
-            caption=Translation.START_TEXT.format(username=update.from_user.mention),
-            reply_markup=Translation.START_BUTTONS
-        )
-    except Exception as e:
-        print(f"⚠️ Error in start: {e}")
-        await update.reply_text("⚠️ कुछ गड़बड़ हो गई `/start` में 😔")
-
+            await update.reply_photo(
+                photo="https://envs.sh/pU.jpg",
+                caption=Translation.START_TEXT.format(update.from_user.mention),
+                reply_markup=Translation.START_BUTTONS
+            )
+        except Exception as e:
+            print(f"⚠️ Error in start: {e}")
+            await update.reply_text("⚠️ कुछ गड़बड़ हो गई `/start` में 😔")
         return
+
+    # 🧩 Case: /start verify-userid-token
     data = update.command[1]
-    if data.split("-", 1)[0] == "verify":
-        userid = data.split("-", 2)[1]
-        token = data.split("-", 3)[2]
+    if data.startswith("verify-"):
+        try:
+            _, userid, token = data.split("-", 2)
+        except ValueError:
+            return await update.reply_text(
+                text="<b>⛔ लिंक गलत है!</b>",
+                protect_content=True
+            )
+
         if str(update.from_user.id) != str(userid):
             return await update.reply_text(
                 text="<b>Exᴘɪʀᴇᴅ Lɪɴᴋ Oʀ ⵊɴᴠᴀʟɪᴅ Lɪɴᴋ !</b>",
                 protect_content=True
             )
+
         is_valid = await check_token(bot, userid, token)
-        if is_valid == True:
+        if is_valid:
             await update.reply_text(
                 text=f"<b>Hᴇʏ {update.from_user.mention} 👋,\nʏᴏᴜ Aʀᴇ Sᴜᴄᴄᴇssғᴜʟʟʏ Vᴇʀɪғɪᴇᴅ !\n\nNᴏᴡ Yᴏᴜ Uᴘʟᴏᴀᴅ Fɪʟᴇs Aɴᴅ Vɪᴅᴇᴏs Tɪʟʟ Tᴏᴅᴀʏ Mɪᴅɴɪɢʜᴛ.</b>",
                 protect_content=True
@@ -65,7 +75,6 @@ async def start(bot, update):
                 text="<b>Exᴘɪʀᴇᴅ Lɪɴᴋ Oʀ ⵊɴᴠᴀʟɪᴅ Lɪɴᴋ !</b>",
                 protect_content=True
             )
-
 
 
 @Client.on_message(filters.command("help", [".", "/"]) & filters.private)
