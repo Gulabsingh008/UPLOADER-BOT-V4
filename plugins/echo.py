@@ -4,7 +4,7 @@ import logging
 logging.basicConfig(level=logging.DEBUG,
                     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
-import requests, urllib.parse, filetype, os, time, shutil, tldextract, asyncio, json, math
+import requests, urllib.parse, filetype, os, time, shutil, tldextract, asyncio, json, math, instaloader
 from bs4 import BeautifulSoup
 from PIL import Image
 from plugins.config import Config
@@ -29,7 +29,25 @@ from plugins.functions.ran_text import random_char
 from plugins.database.database import db
 from plugins.database.add import AddUser
 from pyrogram.types import Thumbnail
-cookies_file = 'cookies.txt'
+
+# Initialize Instaloader
+L = instaloader.Instaloader(
+    dirname_pattern='downloads/instaloader',
+    save_metadata=False,
+    download_videos=True,
+    download_video_thumbnails=False,
+    download_geotags=False,
+    download_comments=False,
+    compress_json=False
+)
+
+# Load cookies if available
+if os.path.exists('cookies.txt'):
+    try:
+        L.load_session_from_file('instagram', 'cookies.txt')
+        logger.info("Instagram cookies loaded successfully")
+    except Exception as e:
+        logger.error(f"Failed to load Instagram cookies: {e}")
 
 def detect_platform(url):
     if "instagram.com" in url:
@@ -45,112 +63,41 @@ def detect_platform(url):
     else:
         return "yt-dlp"
 
-def fetch_meta_content(url, meta_property):
-    headers = {"User-Agent": "Mozilla/5.0"}
+async def download_instagram_media(url):
+    try:
+        shortcode = url.split("/")[-2]
+        post = instaloader.Post.from_shortcode(L.context, shortcode)
+        
+        # Create user specific directory
+        download_dir = f"downloads/instaloader/{post.owner_username}_{shortcode}"
+        os.makedirs(download_dir, exist_ok=True)
+        
+        # Download the post
+        L.download_post(post, target=download_dir)
+        
+        # Find the downloaded file
+        for file in os.listdir(download_dir):
+            if file.endswith(('.mp4', '.jpg', '.jpeg', '.png')):
+                return os.path.join(download_dir, file)
+        return None
+    except Exception as e:
+        logger.error(f"Instaloader error: {e}")
+        return None
+
+async def get_direct_media(url):
+    headers = {
+        "User-Agent": "Mozilla/5.0 (iPhone; CPU iPhone OS 10_3_1 like Mac OS X) AppleWebKit/603.1.30 (KHTML, like Gecko) Version/10.0 Mobile/14E304 Safari/602.1"
+    }
     try:
         r = requests.get(url, headers=headers, timeout=10)
         soup = BeautifulSoup(r.text, "html.parser")
-        meta = soup.find("meta", {"property": meta_property})
+        meta = soup.find("meta", {"property": "og:video"}) or soup.find("meta", {"property": "og:image"})
         return meta.get("content") if meta else None
-    except:
+    except Exception as e:
+        logger.error(f"Direct media fetch error: {e}")
         return None
 
-def get_instagram_media(url):
-    return fetch_meta_content(url, "og:video") or fetch_meta_content(url, "og:image")
-
-def get_pinterest_media(url):
-    return fetch_meta_content(url, "og:image")
-
-def get_twitter_media(url):
-    return fetch_meta_content(url, "og:video") or fetch_meta_content(url, "og:image")
-
-def get_snapchat_media(url):
-    return fetch_meta_content(url, "og:video") or fetch_meta_content(url, "og:image")
-
-async def get_yt_dlp_download(url):
-    try:
-        command = ["yt-dlp", "-g", url]
-        process = await asyncio.create_subprocess_exec(*command, stdout=asyncio.subprocess.PIPE)
-        stdout, _ = await process.communicate()
-        return stdout.decode().split("\n")[0] if stdout else None
-    except:
-        return None
-
-@Client.on_message(filters.private & filters.regex(pattern=".*http.*"))
-async def smart_downloader(bot, update):
-    if update.from_user.id != Config.OWNER_ID:  
-        if not await check_verification(bot, update.from_user.id) and Config.TRUE_OR_FALSE:
-            button = [[
-                InlineKeyboardButton("✓⃝ Vᴇʀɪꜰʏ ✓⃝", url=await get_token(bot, update.from_user.id, f"https://telegram.me/{Config.BOT_USERNAME}?start="))
-                ],[
-                InlineKeyboardButton("🔆 Wᴀᴛᴄʜ Hᴏᴡ Tᴏ Vᴇʀɪꜰʏ 🔆", url=f"{Config.VERIFICATION}")
-            ]]
-            await update.reply_text(
-                text="<b>Pʟᴇᴀsᴇ Vᴇʀɪꜰʏ Fɪʀsᴛ Tᴏ Usᴇ Mᴇ</b>",
-                protect_content=True,
-                reply_markup=InlineKeyboardMarkup(button)
-            )
-            return
-            
-    if Config.LOG_CHANNEL:
-        try:
-            log_message = await update.forward(Config.LOG_CHANNEL)
-            log_info = "Message Sender Information\n"
-            log_info += "\nFirst Name: " + update.from_user.first_name
-            log_info += "\nUser ID: " + str(update.from_user.id)
-            log_info += "\nUsername: @" + (update.from_user.username if update.from_user.username else "")
-            log_info += "\nUser Link: " + update.from_user.mention
-            await log_message.reply_text(
-                text=log_info,
-                disable_web_page_preview=True,
-                quote=True
-            )
-        except Exception as error:
-            print(error)
-            
-    if not update.from_user:
-        return await update.reply_text("I don't know about you sar :(")
-        
-    await AddUser(bot, update)
-    
-    if Config.UPDATES_CHANNEL:
-        fsub = await handle_force_subscribe(bot, update)
-        if fsub == 400:
-            return
-
-    logger.info(update.from_user)
-    url = update.text.strip()
-    
-    # First try direct platform detection
-    await update.reply_chat_action("upload_photo")
-    platform = detect_platform(url)
-    media_url = None
-
-    if platform == "instagram":
-        media_url = get_instagram_media(url)
-    elif platform == "pinterest":
-        media_url = get_pinterest_media(url)
-    elif platform == "twitter":
-        media_url = get_twitter_media(url)
-    elif platform == "snapchat":
-        media_url = get_snapchat_media(url)
-    elif platform == "image":
-        media_url = url
-
-    if media_url:
-        try:
-            if media_url.endswith((".jpg", ".jpeg", ".png", ".webp")):
-                await update.reply_photo(media_url, caption="✅ Here's your image")
-            elif media_url.endswith(".gif"):
-                await update.reply_animation(media_url, caption="✅ Here's your GIF")
-            else:
-                await update.reply_video(media_url, caption="✅ Here's your video")
-            return
-        except Exception as e:
-            logger.error(f"Direct download failed: {e}")
-            # Fall through to yt-dlp method
-
-    # If direct methods failed or not applicable, use yt-dlp
+async def handle_yt_dlp_download(bot, update, url):
     youtube_dl_username = None
     youtube_dl_password = None
     file_name = None
@@ -181,23 +128,12 @@ async def smart_downloader(bot, update):
             youtube_dl_username = youtube_dl_username.strip()
         if youtube_dl_password is not None:
             youtube_dl_password = youtube_dl_password.strip()
-        logger.info(url)
-        logger.info(file_name)
-    else:
-        for entity in update.entities:
-            if entity.type == "text_link":
-                url = entity.url
-            elif entity.type == "url":
-                o = entity.offset
-                l = entity.length
-                url = url[o:o + l]
 
     if Config.HTTP_PROXY != "":
         command_to_exec = [
             "yt-dlp",
             "--no-warnings",
             "--allow-dynamic-mpd",
-            "--cookies", cookies_file,
             "--no-check-certificate",
             "-j",
             url,
@@ -208,7 +144,6 @@ async def smart_downloader(bot, update):
             "yt-dlp",
             "--no-warnings",
             "--allow-dynamic-mpd",
-            "--cookies", cookies_file,
             "--no-check-certificate",
             "-j",
             url,
@@ -222,16 +157,7 @@ async def smart_downloader(bot, update):
     if youtube_dl_password is not None:
         command_to_exec.append("--password")
         command_to_exec.append(youtube_dl_password)
-        
-    logger.info(command_to_exec)
-    chk = await bot.send_message(
-            chat_id=update.chat.id,
-            text=f'ᴘʀᴏᴄᴇssɪɴɢ ʏᴏᴜʀ ʟɪɴᴋ ⌛',
-            disable_web_page_preview=True,
-            reply_to_message_id=update.id,
-            parse_mode=enums.ParseMode.HTML
-          )
-          
+
     process = await asyncio.create_subprocess_exec(
         *command_to_exec,
         stdout=asyncio.subprocess.PIPE,
@@ -240,16 +166,12 @@ async def smart_downloader(bot, update):
     
     stdout, stderr = await process.communicate()
     e_response = stderr.decode().strip()
-    logger.info(e_response)
     t_response = stdout.decode().strip()
     
     if e_response and "nonnumeric port" not in e_response:
         error_message = e_response.replace("please report this issue on https://yt-dl.org/bug . Make sure you are using the latest version; see  https://yt-dl.org/update  on how to update. Be sure to call youtube-dl with the --verbose flag and include its complete output.", "")
         if "This video is only available for registered users." in error_message:
             error_message += Translation.SET_CUSTOM_USERNAME_PASSWORD
-        await chk.delete()
-        
-        time.sleep(10)
         await bot.send_message(
             chat_id=update.chat.id,
             text=Translation.NO_VOID_FORMAT_FOUND.format(str(error_message)),
@@ -344,7 +266,6 @@ async def smart_downloader(bot, update):
             ])
             
         reply_markup = InlineKeyboardMarkup(inline_keyboard)
-        await chk.delete()
         await bot.send_message(
             chat_id=update.chat.id,
             text=Translation.FORMAT_SELECTION.format(Thumbnail) + "\n" + Translation.SET_CUSTOM_USERNAME_PASSWORD,
@@ -352,24 +273,135 @@ async def smart_downloader(bot, update):
             disable_web_page_preview=True,
             reply_to_message_id=update.id
         )
-    else:
-        inline_keyboard = []
-        cb_string_file = "{}={}={}".format(
-            "file", "LFO", "NONE")
-        cb_string_video = "{}={}={}".format(
-            "video", "OFL", "ENON")
-        inline_keyboard.append([
-            InlineKeyboardButton(
-                "📁 ᴍᴇᴅɪᴀ",
-                callback_data=(cb_string_video).encode("UTF-8")
+
+@Client.on_message(filters.private & filters.regex(pattern=".*http.*"))
+async def smart_downloader(bot, update):
+    if update.from_user.id != Config.OWNER_ID:  
+        if not await check_verification(bot, update.from_user.id) and Config.TRUE_OR_FALSE:
+            button = [[
+                InlineKeyboardButton("✓⃝ Vᴇʀɪꜰʏ ✓⃝", url=await get_token(bot, update.from_user.id, f"https://telegram.me/{Config.BOT_USERNAME}?start="))
+                ],[
+                InlineKeyboardButton("🔆 Wᴀᴛᴄʜ Hᴏᴡ Tᴏ Vᴇʀɪꜰʏ 🔆", url=f"{Config.VERIFICATION}")
+            ]]
+            await update.reply_text(
+                text="<b>Pʟᴇᴀsᴇ Vᴇʀɪꜰʏ Fɪʀsᴛ Tᴏ Usᴇ Mᴇ</b>",
+                protect_content=True,
+                reply_markup=InlineKeyboardMarkup(button)
             )
-        ])
-        reply_markup = InlineKeyboardMarkup(inline_keyboard)
-        await chk.delete(True)
-        await bot.send_message(
-            chat_id=update.chat.id,
-            text=Translation.FORMAT_SELECTION,
-            reply_markup=reply_markup,
-            disable_web_page_preview=True,
-            reply_to_message_id=update.id
-        )
+            return
+            
+    if Config.LOG_CHANNEL:
+        try:
+            log_message = await update.forward(Config.LOG_CHANNEL)
+            log_info = "Message Sender Information\n"
+            log_info += "\nFirst Name: " + update.from_user.first_name
+            log_info += "\nUser ID: " + str(update.from_user.id)
+            log_info += "\nUsername: @" + (update.from_user.username if update.from_user.username else "")
+            log_info += "\nUser Link: " + update.from_user.mention
+            await log_message.reply_text(
+                text=log_info,
+                disable_web_page_preview=True,
+                quote=True
+            )
+        except Exception as error:
+            print(error)
+            
+    if not update.from_user:
+        return await update.reply_text("I don't know about you sar :(")
+        
+    await AddUser(bot, update)
+    
+    if Config.UPDATES_CHANNEL:
+        fsub = await handle_force_subscribe(bot, update)
+        if fsub == 400:
+            return
+
+    url = update.text.strip()
+    platform = detect_platform(url)
+    
+    # Processing message
+    chk = await bot.send_message(
+        chat_id=update.chat.id,
+        text=f'ᴘʀᴏᴄᴇssɪɴɢ ʏᴏᴜʀ ʟɪɴᴋ ⌛',
+        disable_web_page_preview=True,
+        reply_to_message_id=update.id,
+        parse_mode=enums.ParseMode.HTML
+    )
+    
+    try:
+        # Instagram specific handling
+        if platform == "instagram":
+            # Try instaloader first
+            file_path = await download_instagram_media(url)
+            if file_path:
+                if file_path.endswith('.mp4'):
+                    await update.reply_video(
+                        video=file_path,
+                        caption="✅ Downloaded via Instaloader",
+                        reply_to_message_id=update.id
+                    )
+                else:
+                    await update.reply_photo(
+                        photo=file_path,
+                        caption="✅ Downloaded via Instaloader",
+                        reply_to_message_id=update.id
+                    )
+                # Clean up
+                shutil.rmtree(os.path.dirname(file_path))
+                await chk.delete()
+                return
+                
+            # Fallback to direct method
+            media_url = await get_direct_media(url)
+            if media_url:
+                if media_url.endswith('.mp4'):
+                    await update.reply_video(
+                        video=media_url,
+                        caption="✅ Downloaded via Direct Link",
+                        reply_to_message_id=update.id
+                    )
+                else:
+                    await update.reply_photo(
+                        photo=media_url,
+                        caption="✅ Downloaded via Direct Link",
+                        reply_to_message_id=update.id
+                    )
+                await chk.delete()
+                return
+                
+            # Final fallback to yt-dlp
+            await handle_yt_dlp_download(bot, update, url)
+            await chk.delete()
+            return
+            
+        # Other platforms
+        elif platform in ["pinterest", "twitter", "snapchat"]:
+            media_url = await get_direct_media(url)
+            if media_url:
+                if media_url.endswith('.mp4'):
+                    await update.reply_video(media_url)
+                else:
+                    await update.reply_photo(media_url)
+                await chk.delete()
+                return
+                
+        # Direct images
+        elif platform == "image":
+            await update.reply_photo(url)
+            await chk.delete()
+            return
+            
+        # Default yt-dlp handler
+        await handle_yt_dlp_download(bot, update, url)
+        await chk.delete()
+        
+    except Exception as e:
+        logger.error(f"Download error: {e}")
+        await chk.edit_text(f"⚠️ Error: {str(e)}")
+        if "login_required" in str(e):
+            await update.reply_text(
+                "🔒 Instagram requires login. Please send cookies.txt file",
+                reply_markup=InlineKeyboardMarkup([
+                    [InlineKeyboardButton("How to Get Cookies", url="https://example.com/cookies-guide")]
+                ])
+            )
