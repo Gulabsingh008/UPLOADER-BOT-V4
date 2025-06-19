@@ -33,11 +33,16 @@ async def start(bot, update):
             return
     if len(update.command) != 2:
         await AddUser(bot, update)
+        try:
         await update.reply_photo(
-            photo="https://envs.sh/pU.jpg",  # यहाँ अपनी image URL डालें
-            caption=Translation.START_TEXT.format(update.from_user.mention),
+            photo="https://envs.sh/pU.jpg",
+            caption=Translation.START_TEXT.format(username=update.from_user.mention),
             reply_markup=Translation.START_BUTTONS
         )
+    except Exception as e:
+        print(f"⚠️ Error in start: {e}")
+        await update.reply_text("⚠️ कुछ गड़बड़ हो गई `/start` में 😔")
+
         return
     data = update.command[1]
     if data.split("-", 1)[0] == "verify":
