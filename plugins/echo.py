@@ -1,16 +1,16 @@
 # ©️ LISA-KOREA | @LISA_FAN_LK | NT_BOT_CHANNEL | TG-SORRY
 
-
 import logging
 logging.basicConfig(level=logging.DEBUG,
                     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
-import requests, urllib.parse, filetype, os, time, shutil, tldextract, asyncio, json, math
+import requests, urllib.parse, filetype, os, time, shutil, tldextract, asyncio, json, math, re
 from PIL import Image
 from plugins.config import Config
 from plugins.script import Translation
 logging.getLogger("pyrogram").setLevel(logging.WARNING)
 from pyrogram import filters
+from pyrogram.types import Message
 import os
 import time
 import random
@@ -29,10 +29,79 @@ from plugins.functions.ran_text import random_char
 from plugins.database.database import db
 from plugins.database.add import AddUser
 from pyrogram.types import Thumbnail
+from bs4 import BeautifulSoup
+
 cookies_file = 'cookies.txt'
+HEADERS = {
+    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36",
+    "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8",
+    "Accept-Language": "en-US,en;q=0.5",
+    "Accept-Encoding": "gzip, deflate",
+    "Connection": "keep-alive",
+    "Upgrade-Insecure-Requests": "1",
+    "Referer": "https://www.google.com/"
+}
 
+async def download_media_content(url: str, user_id: int) -> str:
+    """Universal downloader for images, stories, profile pictures"""
+    try:
+        # Create user-specific temp directory
+        temp_dir = f"downloads/{user_id}"
+        os.makedirs(temp_dir, exist_ok=True)
+        
+        # Get filename from URL or generate random
+        filename = url.split('/')[-1].split('?')[0] or f"file_{random_char(8)}"
+        filepath = f"{temp_dir}/{filename}"
+        
+        # Download the content
+        async with requests.Session() as session:
+            async with session.get(url, headers=HEADERS, timeout=10) as response:
+                if response.status_code == 200:
+                    with open(filepath, 'wb') as f:
+                        f.write(await response.read())
+                    return filepath
+        return None
+    except Exception as e:
+        logger.error(f"Download error: {e}")
+        return None
 
+@Client.on_message(filters.command("dwnld") & filters.regex(r'https?://[^\s]+'))
+async def universal_download_handler(bot: Client, message: Message):
+    """Handle /dwnld command for all direct media"""
+    try:
+        url = message.text.split(' ', 1)[1].strip()
+        
+        # Show processing message
+        processing_msg = await message.reply_text("📥 Downloading your media...", quote=True)
+        
+        # Download the media
+        filepath = await download_media_content(url, message.from_user.id)
+        
+        if not filepath:
+            await processing_msg.edit_text("❌ Failed to download media")
+            return
+        
+        # Determine media type and send
+        if filetype.is_image(filepath):
+            await message.reply_chat_action("upload_photo")
+            await message.reply_photo(filepath)
+        elif filetype.is_video(filepath):
+            await message.reply_chat_action("upload_video")
+            await message.reply_video(filepath)
+        else:
+            await message.reply_document(filepath)
+        
+        # Clean up
+        os.remove(filepath)
+        await processing_msg.delete()
+        
+    except IndexError:
+        await message.reply_text("Please provide a URL after /dwnld command")
+    except Exception as e:
+        logger.error(f"Universal download error: {e}")
+        await message.reply_text(f"❌ Error: {str(e)}")
 
+# ============= KEEP YOUR ORIGINAL CODE COMPLETELY UNCHANGED BELOW =============
 @Client.on_message(filters.private & filters.regex(pattern=".*http.*"))
 async def echo(bot, update):
     if update.from_user.id != Config.OWNER_ID:  
@@ -48,6 +117,7 @@ async def echo(bot, update):
                 reply_markup=InlineKeyboardMarkup(button)
             )
             return
+            
     if Config.LOG_CHANNEL:
         try:
             log_message = await update.forward(Config.LOG_CHANNEL)
@@ -63,14 +133,16 @@ async def echo(bot, update):
             )
         except Exception as error:
             print(error)
+            
     if not update.from_user:
         return await update.reply_text("I don't know about you sar :(")
+        
     await AddUser(bot, update)
+    
     if Config.UPDATES_CHANNEL:
         fsub = await handle_force_subscribe(bot, update)
         if fsub == 400:
             return
-
 
     logger.info(update.from_user)
     url = update.text
@@ -101,7 +173,6 @@ async def echo(bot, update):
             url = url.strip()
         if file_name is not None:
             file_name = file_name.strip()
-        # https://stackoverflow.com/a/761825/4723940
         if youtube_dl_username is not None:
             youtube_dl_username = youtube_dl_username.strip()
         if youtube_dl_password is not None:
