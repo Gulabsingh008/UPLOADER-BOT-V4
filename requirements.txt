@@ -1,8 +1,11 @@
+instaloader>=4.9
+yt-dlp>=2023.11.16
+requests>=2.31.0
+beautifulsoup4>=4.12.0
 aiohttp
 hachoir
 numpy
 Pillow
-requests
 tgcryptos
 olefile
 motor
@@ -19,9 +22,8 @@ ffmpeg-python
 ffmpeg
 aiofiles
 pyromod
-yt-dlp
 lk21
 pytube
 flask
 gunicorn==20.1.0
-beautifulsoup4
+
