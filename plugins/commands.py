@@ -33,9 +33,10 @@ async def start(bot, update):
             return
     if len(update.command) != 2:
         await AddUser(bot, update)
-        await update.reply_text(
-            text=Translation.START_TEXT.format(update.from_user.mention),
-            reply_markup=Translation.START_BUTTONS,
+        await update.reply_photo(
+            photo="https://envs.sh/pU.jpg",  # यहाँ अपनी image URL डालें
+            caption=Translation.START_TEXT.format(update.from_user.mention),
+            reply_markup=Translation.START_BUTTONS
         )
         return
     data = update.command[1]
