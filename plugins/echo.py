@@ -41,256 +41,118 @@ HEADERS = {
     "Upgrade-Insecure-Requests": "1",
     "Referer": "https://www.google.com/"
 }
+# ©️ LISA-KOREA | @LISA_FAN_LK | NT_BOT_CHANNEL | TG-SORRY
+
 import logging
 import os
 import re
 import shutil
-import time
 import requests
-import asyncio
 from bs4 import BeautifulSoup
-from PIL import Image
 from filetype import is_image, is_video
-from pyrogram import Client, filters
-from pyrogram.types import Message
 
-logging.basicConfig(
-    level=logging.DEBUG,
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
-)
+logging.basicConfig(level=logging.DEBUG,
+                    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
 
-# ========== Improved Media Downloader ==========
+# ========== Universal Media Downloader ==========
 async def download_media(url: str, user_id: int) -> str:
-    """Enhanced universal downloader with retries and format handling"""
-    max_retries = 3
-    for attempt in range(max_retries):
-        try:
-            # Create temp directory
-            temp_dir = f"downloads/{user_id}"
-            os.makedirs(temp_dir, exist_ok=True)
+    """Universal downloader for direct media"""
+    try:
+        # Create temp directory
+        temp_dir = f"downloads/{user_id}"
+        os.makedirs(temp_dir, exist_ok=True)
+        
+        # Get filename from URL
+        filename = re.sub(r'[^\w\-_. ]', '_', url.split('/')[-1].split('?')[0])
+        if not filename.split('.')[-1].lower() in ['jpg','jpeg','png','mp4','webp']:
+            filename += '.jpg'  # Default extension
             
-            # Generate safe filename
-            filename = re.sub(r'[^\w\-_. ]', '_', url.split('/')[-1].split('?')[0])
-            if not any(filename.lower().endswith(ext) for ext in ['.jpg','.jpeg','.png','.mp4','.webp']):
-                filename += '.jpg'
-                
-            filepath = f"{temp_dir}/{filename}"
-            
-            # Download with platform-specific headers
-            headers = {
-                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
-                'Accept': 'image/webp,image/*,*/*;q=0.8'
-            }
-            
-            response = requests.get(url, headers=headers, stream=True, timeout=20)
-            response.raise_for_status()
-            
-            # Download with progress tracking
-            downloaded = 0
+        filepath = f"{temp_dir}/{filename}"
+        
+        # Download with progress
+        response = requests.get(url, stream=True, timeout=20)
+        if response.status_code == 200:
             with open(filepath, 'wb') as f:
                 for chunk in response.iter_content(1024):
                     f.write(chunk)
-                    downloaded += len(chunk)
-                    
-            # Verify download completed
-            if downloaded < 1024:  # Less than 1KB indicates failure
-                raise ValueError("Incomplete download")
-                
-            # Convert WebP to JPEG if needed
-            if filepath.endswith('.webp'):
-                jpg_path = filepath.replace('.webp', '.jpg')
-                try:
-                    with Image.open(filepath) as img:
-                        img.convert('RGB').save(jpg_path, 'JPEG', quality=95)
-                    os.remove(filepath)
-                    filepath = jpg_path
-                except Exception as conv_error:
-                    logger.error(f"WebP conversion failed: {conv_error}")
-                    os.remove(filepath)
-                    return None
-                    
             return filepath
-            
-        except requests.exceptions.RequestException as e:
-            if attempt == max_retries - 1:
-                logger.error(f"Download failed after {max_retries} attempts: {e}")
-                return None
-            await asyncio.sleep(1)  # Wait before retry
-        except Exception as e:
-            logger.error(f"Media download error: {e}")
-            return None
-    return None
-
-# ========== Enhanced Social Media Extractors ==========
-def extract_instagram_media(url):
-    """Improved Instagram media extractor with mobile fallback"""
-    try:
-        # Try desktop page first
-        headers = {
-            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
-        }
-        response = requests.get(url, headers=headers, timeout=15)
-        soup = BeautifulSoup(response.text, 'html.parser')
-        
-        # Try different meta tag variations
-        for prop in ['og:video', 'og:image', 'twitter:image']:
-            meta = soup.find('meta', {'property': prop}) or soup.find('meta', {'name': prop})
-            if meta and meta.get('content'):
-                return meta.get('content')
-                
-        # Fallback to mobile page
-        mobile_url = url.replace("www.instagram.com", "m.instagram.com")
-        response = requests.get(mobile_url, headers={
-            'User-Agent': 'Mozilla/5.0 (iPhone; CPU iPhone OS 15_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/15.0 Mobile/15E148 Safari/604.1'
-        }, timeout=15)
-        soup = BeautifulSoup(response.text, 'html.parser')
-        
-        for prop in ['og:video', 'og:image']:
-            meta = soup.find('meta', {'property': prop})
-            if meta and meta.get('content'):
-                return meta.get('content')
-                
         return None
     except Exception as e:
-        logger.error(f"Instagram extractor error: {e}")
+        logger.error(f"Media download error: {e}")
         return None
 
+# ========== Social Media Extractors ==========
 def extract_twitter_media(url):
-    """Improved Twitter media extractor with x.com support"""
+    """Extract media from Twitter URLs"""
     try:
-        headers = {
-            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
-        }
-        response = requests.get(url, headers=headers, timeout=15)
+        response = requests.get(url, timeout=10)
         soup = BeautifulSoup(response.text, 'html.parser')
         
-        # Try for video
-        video = soup.find('meta', {'property': 'og:video'}) or \
-                soup.find('meta', {'name': 'twitter:player:stream'})
+        # Try video first
+        video = soup.find('meta', {'property': 'og:video'})
         if video:
-            return video.get('content')
+            return video['content']
         
-        # Try for image
-        image = soup.find('meta', {'property': 'og:image'}) or \
-                soup.find('meta', {'name': 'twitter:image'})
+        # Then image
+        image = soup.find('meta', {'property': 'og:image'})
         if image:
-            return image.get('content')
-            
+            return image['content']
+        
         return None
-    except Exception as e:
-        logger.error(f"Twitter extractor error: {e}")
+    except:
         return None
 
 def extract_pinterest_media(url):
-    """Improved Pinterest media extractor"""
+    """Extract media from Pinterest URLs"""
     try:
-        headers = {
-            'User-Agent': 'Pinterest/3.0 (iPhone; iOS 15_0; Scale/3.00)'
-        }
-        response = requests.get(url, headers=headers, timeout=15)
+        response = requests.get(url, timeout=10)
         soup = BeautifulSoup(response.text, 'html.parser')
-        
-        image = soup.find('meta', {'property': 'og:image'}) or \
-                soup.find('meta', {'name': 'pinterest:image'})
-        return image.get('content') if image else None
-    except Exception as e:
-        logger.error(f"Pinterest extractor error: {e}")
+        image = soup.find('meta', {'property': 'og:image'})
+        return image['content'] if image else None
+    except:
         return None
 
 # ========== Command Handlers ==========
 @Client.on_message(filters.command(["dwnld", "download"]) & filters.regex(r'https?://[^\s]+'))
 async def media_download_handler(bot: Client, message: Message):
-    """Complete fixed media download handler"""
+    """Handle /dwnld command for all direct media"""
     try:
-        if len(message.command) < 2:
-            await message.reply_text("Please provide a URL after /dwnld command\nExample: /dwnld https://example.com/image.jpg")
-            return
-            
         url = message.text.split(' ', 1)[1].strip()
         processing_msg = await message.reply("🔍 Processing your link...", quote=True)
         
-        # Platform detection
-        if "instagram.com" in url:
-            media_url = extract_instagram_media(url)
-            platform = "Instagram"
-        elif "twitter.com" in url or "x.com" in url:
+        # Platform-specific extractors
+        if "twitter.com" in url:
             media_url = extract_twitter_media(url)
-            platform = "Twitter"
         elif "pinterest.com" in url:
             media_url = extract_pinterest_media(url)
-            platform = "Pinterest"
         else:
             media_url = url  # Try direct download
-            platform = "Direct"
-            
-        if not media_url:
-            await processing_msg.edit_text("❌ Couldn't extract media URL (private or unsupported content)")
-            return
             
         # Download the media
-        filepath = await download_media(media_url, message.from_user.id)
+        filepath = await download_media(media_url or url, message.from_user.id)
         
         if not filepath:
-            await processing_msg.edit_text("❌ Download failed (invalid URL or server error)")
-            return
-            
-        # Verify file exists and has content
-        if not os.path.exists(filepath) or os.path.getsize(filepath) < 1024:
-            await processing_msg.edit_text("❌ Downloaded file is corrupted or empty")
-            try:
-                os.remove(filepath)
-            except:
-                pass
+            await processing_msg.edit_text("❌ Couldn't download media")
             return
             
         # Send appropriate media type
-        try:
-            caption = f"📥 Downloaded from {platform}"
-        
-            mime = filetype.guess(filepath)
-            print("Detected Mime:", mime.mime if mime else "None")
-        
-            # Open file as binary for Telegram upload
-            with open(filepath, "rb") as f:
-                if mime and mime.mime.startswith("image"):
-                    await message.reply_chat_action("upload_photo")
-                    await message.reply_photo(
-                        photo=f,
-                        caption=caption
-                    )
-        
-                elif mime and mime.mime.startswith("video"):
-                    await message.reply_chat_action("upload_video")
-                    await message.reply_video(
-                        video=f,
-                        caption=caption
-                    )
-        
-                else:
-                    await message.reply_document(
-                        document=f,
-                        caption=caption
-                    )
-        
-        except Exception as send_error:
-            logger.error(f"Media sending error: {send_error}")
-            await processing_msg.edit_text("❌ Failed to send media (format may be unsupported)")
-
-            return
-
-        finally:
-            # Clean up in all cases
-            try:
-                os.remove(filepath)
-            except Exception as clean_error:
-                logger.error(f"Cleanup error: {clean_error}")
+        if is_image(filepath):
+            await message.reply_photo(filepath)
+        elif is_video(filepath):
+            await message.reply_video(filepath)
+        else:
+            await message.reply_document(filepath)
             
+        # Clean up
+        os.remove(filepath)
         await processing_msg.delete()
-            
+        
     except Exception as e:
-        logger.error(f"Handler error: {e}")
+        logger.error(f"Media download error: {e}")
         await message.reply_text(f"❌ Error: {str(e)}")
+
+
 # ============= KEEP YOUR ORIGINAL CODE COMPLETELY UNCHANGED BELOW =============
 @Client.on_message(filters.private & filters.regex(pattern=".*http.*"))
 async def echo(bot, update):
