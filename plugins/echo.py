@@ -251,21 +251,32 @@ async def media_download_handler(bot: Client, message: Message):
             mime = filetype.guess(filepath)
             print("Detected Mime:", mime.mime if mime else "None")
         
+            # Open file as binary for Telegram upload
             with open(filepath, "rb") as f:
                 if mime and mime.mime.startswith("image"):
                     await message.reply_chat_action("upload_photo")
-                    await message.reply_photo(photo=f, caption=caption)
+                    await message.reply_photo(
+                        photo=f,
+                        caption=caption
+                    )
         
                 elif mime and mime.mime.startswith("video"):
                     await message.reply_chat_action("upload_video")
-                    await message.reply_video(video=f, caption=caption)
+                    await message.reply_video(
+                        video=f,
+                        caption=caption
+                    )
         
                 else:
-                    await message.reply_document(document=f, caption=caption)
+                    await message.reply_document(
+                        document=f,
+                        caption=caption
+                    )
         
         except Exception as send_error:
             logger.error(f"Media sending error: {send_error}")
             await processing_msg.edit_text("❌ Failed to send media (format may be unsupported)")
+
             return
 
         finally:
