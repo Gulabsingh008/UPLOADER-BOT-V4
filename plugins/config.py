@@ -37,7 +37,7 @@ class Config(object):
     LOGGER = logging
     OWNER_ID = int(os.environ.get("OWNER_ID", "7170452349"))
     SESSION_NAME = "UploaderXNTBot"
-    UPDATES_CHANNEL = os.environ.get("UPDATES_CHANNEL", "-1002213359277")
+    UPDATES_CHANNEL = os.environ.get("UPDATES_CHANNEL", "-1002237630219")
 
     TG_MIN_FILE_SIZE = 2194304000
     BOT_USERNAME = os.environ.get("BOT_USERNAME", "@Zxvideo_leech_bot")
