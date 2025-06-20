@@ -2,6 +2,8 @@ instaloader>=4.9
 yt-dlp
 requests
 beautifulsoup4>=4.12.0
+Pillow>=10.0.0
+filetype>=1.2.0
 aiohttp
 hachoir
 numpy
