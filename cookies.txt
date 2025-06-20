@@ -1,10 +1,96 @@
-.instagram.com	TRUE	/	TRUE	1784823878	ps_n	1
-.instagram.com	TRUE	/	TRUE	1783184305	datr	B-M5aL-keuR5zFOVmD-vzTzp
-.instagram.com	TRUE	/	TRUE	1750952511	wd	1366x641
-.instagram.com	TRUE	/	TRUE	1758123715	ds_user_id	1518625610
-.instagram.com	TRUE	/	TRUE	1780160314	ig_nrcb	1
-.instagram.com	TRUE	/	TRUE	1784907715	csrftoken	FfLYqFkSXQ21NppeM2bzLQPaHy3N2Bgh
-.instagram.com	TRUE	/	TRUE	1780160303	ig_did	965B12A8-62E8-4288-80D8-13D243451DC5
-.instagram.com	TRUE	/	TRUE	1784823878	ps_l	1
-.instagram.com	TRUE	/	TRUE	1783184314	mid	aDnjEQALAAFGKyuxsqdVPtdjW3wN
-.instagram.com	TRUE	/	TRUE	1781883712	sessionid	1518625610%3AL35WbgZa6Ai7ZW%3A3%3AAYeMcwE_dJJyf1Qx9tpHC_IBp8jPHUUetL6ODaxiCQ
+async def download_media(url: str, user_id: int) -> str:
+    """Universal downloader for direct media"""
+    try:
+        # Create temp directory
+        temp_dir = f"downloads/{user_id}"
+        os.makedirs(temp_dir, exist_ok=True)
+        
+        # Get filename from URL
+        filename = re.sub(r'[^\w\-_. ]', '_', url.split('/')[-1].split('?')[0])
+        if not filename.split('.')[-1].lower() in ['jpg','jpeg','png','mp4','webp']:
+            filename += '.jpg'  # Default extension
+            
+        filepath = f"{temp_dir}/{filename}"
+        
+        # Download with progress
+        response = requests.get(url, stream=True, timeout=20)
+        if response.status_code == 200:
+            with open(filepath, 'wb') as f:
+                for chunk in response.iter_content(1024):
+                    f.write(chunk)
+            return filepath
+        return None
+    except Exception as e:
+        logger.error(f"Media download error: {e}")
+        return None
+
+# ========== Social Media Extractors ==========
+def extract_twitter_media(url):
+    """Extract media from Twitter URLs"""
+    try:
+        response = requests.get(url, timeout=10)
+        soup = BeautifulSoup(response.text, 'html.parser')
+        
+        # Try video first
+        video = soup.find('meta', {'property': 'og:video'})
+        if video:
+            return video['content']
+        
+        # Then image
+        image = soup.find('meta', {'property': 'og:image'})
+        if image:
+            return image['content']
+        
+        return None
+    except:
+        return None
+
+def extract_pinterest_media(url):
+    """Extract media from Pinterest URLs"""
+    try:
+        response = requests.get(url, timeout=10)
+        soup = BeautifulSoup(response.text, 'html.parser')
+        image = soup.find('meta', {'property': 'og:image'})
+        return image['content'] if image else None
+    except:
+        return None
+
+# ========== Command Handlers ==========
+@Client.on_message(filters.command(["dwnld", "download"]) & filters.regex(r'https?://[^\s]+'))
+async def media_download_handler(bot: Client, message: Message):
+    """Handle /dwnld command for all direct media"""
+    try:
+        url = message.text.split(' ', 1)[1].strip()
+        processing_msg = await message.reply("🔍 Processing your link...", quote=True)
+        
+        # Platform-specific extractors
+        if "twitter.com" in url:
+            media_url = extract_twitter_media(url)
+        elif "pinterest.com" in url:
+            media_url = extract_pinterest_media(url)
+        else:
+            media_url = url  # Try direct download
+            
+        # Download the media
+        filepath = await download_media(media_url or url, message.from_user.id)
+        
+        if not filepath:
+            await processing_msg.edit_text("❌ Couldn't download media")
+            return
+            
+        # Send appropriate media type
+        if is_image(filepath):
+            await message.reply_photo(filepath)
+        elif is_video(filepath):
+            await message.reply_video(filepath)
+        else:
+            await message.reply_document(filepath)
+            
+        # Clean up
+        os.remove(filepath)
+        await processing_msg.delete()
+        
+    except Exception as e:
+        logger.error(f"Media download error: {e}")
+        await message.reply_text(f"❌ Error: {str(e)}")
+
