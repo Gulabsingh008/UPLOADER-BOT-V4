@@ -42,64 +42,114 @@ HEADERS = {
     "Referer": "https://www.google.com/"
 }
 
-async def download_media_content(url: str, user_id: int) -> str:
-    """Universal downloader for images, stories, profile pictures"""
+
+import shutil
+import requests
+from bs4 import BeautifulSoup
+from filetype import is_image, is_video
+
+logging.basicConfig(level=logging.DEBUG,
+                    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+logger = logging.getLogger(__name__)
+
+# ========== Universal Media Downloader ==========
+async def download_media(url: str, user_id: int) -> str:
+    """Universal downloader for direct media"""
     try:
-        # Create user-specific temp directory
+        # Create temp directory
         temp_dir = f"downloads/{user_id}"
         os.makedirs(temp_dir, exist_ok=True)
         
-        # Get filename from URL or generate random
-        filename = url.split('/')[-1].split('?')[0] or f"file_{random_char(8)}"
+        # Get filename from URL
+        filename = re.sub(r'[^\w\-_. ]', '_', url.split('/')[-1].split('?')[0])
+        if not filename.split('.')[-1].lower() in ['jpg','jpeg','png','mp4','webp']:
+            filename += '.jpg'  # Default extension
+            
         filepath = f"{temp_dir}/{filename}"
         
-        # Download the content
-        async with requests.Session() as session:
-            async with session.get(url, headers=HEADERS, timeout=10) as response:
-                if response.status_code == 200:
-                    with open(filepath, 'wb') as f:
-                        f.write(await response.read())
-                    return filepath
+        # Download with progress
+        response = requests.get(url, stream=True, timeout=20)
+        if response.status_code == 200:
+            with open(filepath, 'wb') as f:
+                for chunk in response.iter_content(1024):
+                    f.write(chunk)
+            return filepath
         return None
     except Exception as e:
-        logger.error(f"Download error: {e}")
+        logger.error(f"Media download error: {e}")
         return None
 
-@Client.on_message(filters.command("dwnld") & filters.regex(r'https?://[^\s]+'))
-async def universal_download_handler(bot: Client, message: Message):
+# ========== Social Media Extractors ==========
+def extract_twitter_media(url):
+    """Extract media from Twitter URLs"""
+    try:
+        response = requests.get(url, timeout=10)
+        soup = BeautifulSoup(response.text, 'html.parser')
+        
+        # Try video first
+        video = soup.find('meta', {'property': 'og:video'})
+        if video:
+            return video['content']
+        
+        # Then image
+        image = soup.find('meta', {'property': 'og:image'})
+        if image:
+            return image['content']
+        
+        return None
+    except:
+        return None
+
+def extract_pinterest_media(url):
+    """Extract media from Pinterest URLs"""
+    try:
+        response = requests.get(url, timeout=10)
+        soup = BeautifulSoup(response.text, 'html.parser')
+        image = soup.find('meta', {'property': 'og:image'})
+        return image['content'] if image else None
+    except:
+        return None
+
+# ========== Command Handlers ==========
+@Client.on_message(filters.command(["dwnld", "download"]) & filters.regex(r'https?://[^\s]+'))
+async def media_download_handler(bot: Client, message: Message):
     """Handle /dwnld command for all direct media"""
     try:
         url = message.text.split(' ', 1)[1].strip()
+        processing_msg = await message.reply("🔍 Processing your link...", quote=True)
         
-        # Show processing message
-        processing_msg = await message.reply_text("📥 Downloading your media...", quote=True)
-        
+        # Platform-specific extractors
+        if "twitter.com" in url:
+            media_url = extract_twitter_media(url)
+        elif "pinterest.com" in url:
+            media_url = extract_pinterest_media(url)
+        else:
+            media_url = url  # Try direct download
+            
         # Download the media
-        filepath = await download_media_content(url, message.from_user.id)
+        filepath = await download_media(media_url or url, message.from_user.id)
         
         if not filepath:
-            await processing_msg.edit_text("❌ Failed to download media")
+            await processing_msg.edit_text("❌ Couldn't download media")
             return
-        
-        # Determine media type and send
-        if filetype.is_image(filepath):
-            await message.reply_chat_action("upload_photo")
+            
+        # Send appropriate media type
+        if is_image(filepath):
             await message.reply_photo(filepath)
-        elif filetype.is_video(filepath):
-            await message.reply_chat_action("upload_video")
+        elif is_video(filepath):
             await message.reply_video(filepath)
         else:
             await message.reply_document(filepath)
-        
+            
         # Clean up
         os.remove(filepath)
         await processing_msg.delete()
         
-    except IndexError:
-        await message.reply_text("Please provide a URL after /dwnld command")
     except Exception as e:
-        logger.error(f"Universal download error: {e}")
+        logger.error(f"Media download error: {e}")
         await message.reply_text(f"❌ Error: {str(e)}")
+
+
 
 # ============= KEEP YOUR ORIGINAL CODE COMPLETELY UNCHANGED BELOW =============
 @Client.on_message(filters.private & filters.regex(pattern=".*http.*"))
