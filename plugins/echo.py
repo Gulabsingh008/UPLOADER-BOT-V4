@@ -247,12 +247,16 @@ async def media_download_handler(bot: Client, message: Message):
         # Send appropriate media type
         try:
             caption = f"📥 Downloaded from {platform}"
+        
+            mime = filetype.guess(filepath)
+            print("Detected Mime:", mime.mime if mime else "None")
+        
             with open(filepath, "rb") as f:
-                if is_image(filepath):
+                if mime and mime.mime.startswith("image"):
                     await message.reply_chat_action("upload_photo")
                     await message.reply_photo(photo=f, caption=caption)
         
-                elif is_video(filepath):
+                elif mime and mime.mime.startswith("video"):
                     await message.reply_chat_action("upload_video")
                     await message.reply_video(video=f, caption=caption)
         
@@ -263,6 +267,7 @@ async def media_download_handler(bot: Client, message: Message):
             logger.error(f"Media sending error: {send_error}")
             await processing_msg.edit_text("❌ Failed to send media (format may be unsupported)")
             return
+
         finally:
             # Clean up in all cases
             try:
