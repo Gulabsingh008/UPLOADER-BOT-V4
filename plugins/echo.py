@@ -152,7 +152,7 @@ def extract_pinterest_media(url):
         soup = BeautifulSoup(response.text, 'html.parser')
         
         image = soup.find('meta', {'property': 'og:image'}) or \
-                soup.find('meta', {'name': 'pinterest:image'])
+                soup.find('meta', {'name': 'pinterest:image'})
         return image.get('content') if image else None
     except Exception as e:
         logger.error(f"Pinterest extractor error: {e}")
