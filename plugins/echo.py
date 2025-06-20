@@ -247,23 +247,18 @@ async def media_download_handler(bot: Client, message: Message):
         # Send appropriate media type
         try:
             caption = f"📥 Downloaded from {platform}"
-            if is_image(filepath):
-                await message.reply_chat_action("upload_photo")
-                await message.reply_photo(
-                    photo=filepath,
-                    caption=caption
-                )
-            elif is_video(filepath):
-                await message.reply_chat_action("upload_video")
-                await message.reply_video(
-                    video=filepath,
-                    caption=caption
-                )
-            else:
-                await message.reply_document(
-                    document=filepath,
-                    caption=caption
-                )
+            with open(filepath, "rb") as f:
+                if is_image(filepath):
+                    await message.reply_chat_action("upload_photo")
+                    await message.reply_photo(photo=f, caption=caption)
+        
+                elif is_video(filepath):
+                    await message.reply_chat_action("upload_video")
+                    await message.reply_video(video=f, caption=caption)
+        
+                else:
+                    await message.reply_document(document=f, caption=caption)
+        
         except Exception as send_error:
             logger.error(f"Media sending error: {send_error}")
             await processing_msg.edit_text("❌ Failed to send media (format may be unsupported)")
