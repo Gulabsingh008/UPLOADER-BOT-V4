@@ -246,6 +246,7 @@ async def echo(bot, update):
             "--allow-dynamic-mpd",
             "--cookies", cookies_file,
             "--no-check-certificate",
+            "--merge-output-format",
             "-j",
             url,
             "--proxy", Config.HTTP_PROXY
@@ -257,6 +258,7 @@ async def echo(bot, update):
             "--allow-dynamic-mpd",
             "--cookies", cookies_file,
             "--no-check-certificate",
+            "--merge-output-format",
             "-j",
             url,
             "--geo-bypass-country",
